@@ -16,13 +16,20 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
+    brotli_static on;
+
+    location ~* \.wasm$ {
+        default_type application/wasm;
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header Pragma "no-cache";
+        add_header Expires "0";
+    }
+    location ~* \.(js|data)$ {
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header Pragma "no-cache";
+        add_header Expires "0";
+    }
     location / {
         try_files $uri $uri/ =404;
-        
-        location ~* \.(js|wasm|data)$ {
-            add_header Cache-Control "no-cache, no-store, must-revalidate";
-            add_header Pragma "no-cache";
-            add_header Expires "0";
-        }
     }
 }
