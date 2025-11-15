@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>Unity Web Player | stack-guys-game-client</title>
+    <style>
+      /* 세로모드 안내 오버레이 */
+      #orientation-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.95);
+        z-index: 9999;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        color: white;
+        font-family: Arial, sans-serif;
+        text-align: center;
+        padding: 20px;
+        box-sizing: border-box;
+      }
+
+      #orientation-overlay.show {
+        display: flex;
+      }
+
+      .rotate-icon {
+        font-size: 80px;
+        margin-bottom: 20px;
+        animation: rotate 2s ease-in-out infinite;
+      }
+
+      @keyframes rotate {
+        0%, 100% { transform: rotate(0deg); }
+        50% { transform: rotate(90deg); }
+      }
+
+      .orientation-message {
+        font-size: 24px;
+        font-weight: bold;
+        margin-bottom: 10px;
+      }
+
+      .orientation-subtitle {
+        font-size: 16px;
+        color: #aaa;
+      }
+
+      /* 로딩 화면 */
+      #loading-overlay {
+        display: flex;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: #231F20;
+        z-index: 9998;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        color: white;
+        font-family: Arial, sans-serif;
+      }
+
+      #loading-overlay.hidden {
+        display: none;
+      }
+
+      .loading-logo {
+        font-size: 48px;
+        font-weight: bold;
+        margin-bottom: 30px;
+        color: #FFD700;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+      }
+
+      .loading-spinner {
+        width: 50px;
+        height: 50px;
+        border: 5px solid rgba(255, 255, 255, 0.3);
+        border-top: 5px solid #FFD700;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-bottom: 20px;
+      }
+
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+
+      .loading-bar-container {
+        width: 300px;
+        height: 30px;
+        background-color: rgba(255, 255, 255, 0.2);
+        border-radius: 15px;
+        overflow: hidden;
+        margin-bottom: 15px;
+      }
+
+      .loading-bar {
+        width: 0%;
+        height: 100%;
+        background: linear-gradient(90deg, #4A9EFF 0%, #FFD700 100%);
+        border-radius: 15px;
+        transition: width 0.3s ease;
+      }
+
+      .loading-text {
+        font-size: 18px;
+        color: #aaa;
+      }
+
+      .loading-percentage {
+        font-size: 24px;
+        font-weight: bold;
+        margin-bottom: 10px;
+      }
+    </style>
+  </head>
+  <body style="text-align: center; padding: 0; border: 0; margin: 0;">
+    <!-- 세로모드 안내 오버레이 -->
+    <div id="orientation-overlay">
+      <div class="rotate-icon">📱</div>
+      <div class="orientation-message">화면을 가로로 회전해주세요</div>
+      <div class="orientation-subtitle">Please rotate your device to landscape mode</div>
+    </div>
+
+    <!-- 로딩 화면 -->
+    <div id="loading-overlay">
+      <div class="loading-logo">STACK GUYS</div>
+      <div class="loading-spinner"></div>
+      <div class="loading-percentage" id="loading-percentage">0%</div>
+      <div class="loading-bar-container">
+        <div class="loading-bar" id="loading-bar"></div>
+      </div>
+      <div class="loading-text">Loading...</div>
+    </div>
+
+    <canvas id="unity-canvas"
+            width="1920"
+            height="1080"
+            tabindex="-1"
+            style="width: 1920px; height: 1080px; background: #231F20">
+    </canvas>
+
+    <!-- ✅ 로더/빌드 파일을 현재 서버(nginx/ALB)에서 직접 로드 -->
+    <script src="Build/Client.loader.js"></script>
+
+    <script>
+      var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+      // 화면 방향 확인 함수
+      function checkOrientation() {
+        if (!isMobile) return;
+
+        var orientationOverlay = document.getElementById('orientation-overlay');
+        var canvas = document.getElementById('unity-canvas');
+
+        var isPortrait = window.innerHeight > window.innerWidth;
+
+        if (isPortrait) {
+          // 세로 모드: 오버레이 표시, 캔버스 숨김
+          orientationOverlay.classList.add('show');
+          canvas.style.display = 'none';
+        } else {
+          // 가로 모드: 오버레이 숨김, 캔버스 표시
+          orientationOverlay.classList.remove('show');
+          canvas.style.display = 'block';
+        }
+      }
+
+      if (isMobile) {
+        // Mobile device style: fill the whole browser client area with the game canvas:
+        var meta = document.createElement('meta');
+        meta.name = 'viewport';
+        meta.content = 'width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes';
+        document.getElementsByTagName('head')[0].appendChild(meta);
+
+        var canvas = document.querySelector("#unity-canvas");
+        canvas.style.width = "100%";
+        canvas.style.height = "100%";
+        canvas.style.position = "fixed";
+
+        document.body.style.textAlign = "left";
+
+        window.addEventListener('orientationchange', function() {
+          setTimeout(checkOrientation, 100);
+        });
+
+        window.addEventListener('resize', function() {
+          checkOrientation();
+        });
+
+        // 초기 방향 확인
+        checkOrientation();
+      }
+
+      // ✅ 현재 도메인(/Build) 기준으로 Unity 리소스를 로드
+      createUnityInstance(document.querySelector("#unity-canvas"), {
+        arguments: [],
+        dataUrl: "Build/Client.data",
+        frameworkUrl: "Build/Client.framework.js",
+        codeUrl: "Build/Client.wasm",
+        streamingAssetsUrl: "StreamingAssets",
+        companyName: "DefaultCompany",
+        productName: "stack-guys-game-client",
+        productVersion: "0.1.0",
+      }, (progress) => {
+        // 로딩 진행률 업데이트
+        var percentage = Math.round(progress * 100);
+        document.getElementById('loading-percentage').textContent = percentage + '%';
+        document.getElementById('loading-bar').style.width = percentage + '%';
+      }).then((unityInstance) => {
+        // Unity 로딩 완료 - 로딩 화면 숨기기
+        document.getElementById('loading-overlay').classList.add('hidden');
+
+        if (isMobile) {
+          checkOrientation();
+        }
+      }).catch((message) => {
+        alert(message);
+      });
+    </script>
+  </body>
+</html>
