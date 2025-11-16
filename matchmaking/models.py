@@ -30,6 +30,10 @@ class MatchmakingResponse(BaseModel):
     player_id: str
     status: MatchmakingStatus
     message: Optional[str] = None
+    server_ip: Optional[str] = None
+    server_port: Optional[int] = None
+    session_id: Optional[str] = None
+    is_rejoin: Optional[bool] = False
 
 
 class TicketStatusResponse(BaseModel):
@@ -70,3 +74,17 @@ class GameSessionInfo(BaseModel):
     max_players: int
     status: GameServerStatus
     created_at: datetime
+
+
+class PlayerJoinedRequest(BaseModel):
+    player_id: str
+    server_id: str
+    character_type: str
+    character_name: str
+
+
+class PlayerDataResponse(BaseModel):
+    player_id: str
+    character_type: str
+    character_name: str
+    session_id: str

@@ -9,7 +9,9 @@ from models import (
     GameServerHeartbeat,
     GameServerInfo,
     MatchmakingStatus,
-    GameServerStatus
+    GameServerStatus,
+    PlayerJoinedRequest,
+    PlayerDataResponse
 )
 from redis_client import RedisClient
 from config import settings
@@ -77,11 +79,40 @@ async def health_check():
 async def find_game(request: MatchmakingRequest, background_tasks: BackgroundTasks):
     """
     매치메이킹 요청
-    - 플레이어를 큐에 추가
+    - 재입장 가능한 세션이 있으면 즉시 반환
+    - 없으면 플레이어를 큐에 추가
     - 티켓 ID 반환
     """
-    ticket_id = str(uuid.uuid4())
     player_id = request.player_id or str(uuid.uuid4())
+
+    # 재입장 체크
+    active_session = redis_client.get_active_player_session(player_id)
+
+    if active_session:
+        # 세션이 여전히 유효한지 확인
+        server_id = active_session.get("server_id")
+        server = redis_client.get_server_info(server_id)
+
+        if server and server.get("status") == GameServerStatus.IN_GAME.value:
+            # 즉시 재입장 응답 (INGAME 서버만)
+            ticket_id = str(uuid.uuid4())
+
+            print(f"🔄 Player {player_id} rejoining INGAME server {server_id}")
+
+            return MatchmakingResponse(
+                success=True,
+                ticket_id=ticket_id,
+                player_id=player_id,
+                status=MatchmakingStatus.MATCHED,
+                server_ip=active_session["server_ip"],
+                server_port=int(active_session["server_port"]),
+                session_id=active_session["session_id"],
+                is_rejoin=True,
+                message="Rejoining previous game"
+            )
+
+    # 정상 매칭 프로세스
+    ticket_id = str(uuid.uuid4())
 
     # 큐에 추가
     redis_client.add_to_queue(ticket_id, player_id)
@@ -169,6 +200,52 @@ async def get_available_servers():
     """
     servers = redis_client.get_available_servers()
     return {"servers": servers, "count": len(servers)}
+
+
+@app.post("/api/player-joined")
+async def player_joined(request: PlayerJoinedRequest):
+    """
+    게임 서버에서 플레이어 입장 시 호출
+    - 플레이어 세션 데이터 생성
+    - 캐릭터 정보 저장
+    """
+    server_info = redis_client.get_server_info(request.server_id)
+
+    if not server_info:
+        raise HTTPException(status_code=404, detail="Server not found")
+
+    redis_client.register_player_session(
+        player_id=request.player_id,
+        server_id=request.server_id,
+        server_ip=server_info["ip"],
+        server_port=int(server_info["port"]),
+        session_id=request.server_id,
+        character_type=request.character_type,
+        character_name=request.character_name
+    )
+
+    print(f"✅ Player joined: {request.player_id} ({request.character_name}) on server {request.server_id}")
+
+    return {"status": "ok", "message": "Player session registered"}
+
+
+@app.get("/api/player-data", response_model=PlayerDataResponse)
+async def get_player_data(player_id: str, session_id: str):
+    """
+    Unity에서 재입장 시 플레이어 데이터 조회
+    - 캐릭터 정보 반환
+    """
+    data = redis_client.get_player_data(player_id, session_id)
+
+    if not data:
+        raise HTTPException(status_code=404, detail="Player data not found")
+
+    return PlayerDataResponse(
+        player_id=player_id,
+        character_type=data["character_type"],
+        character_name=data["character_name"],
+        session_id=session_id
+    )
 
 
 @app.post("/api/server/game-ended")

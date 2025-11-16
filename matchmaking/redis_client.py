@@ -159,6 +159,85 @@ class RedisClient:
 
         return available
 
+    # ==================== Player Session Management (재입장) ====================
+
+    def register_player_session(
+        self,
+        player_id: str,
+        server_id: str,
+        server_ip: str,
+        server_port: int,
+        session_id: str,
+        character_type: str,
+        character_name: str
+    ) -> None:
+        """플레이어 세션 등록 (게임 입장 시)"""
+        data = {
+            "player_id": player_id,
+            "server_id": server_id,
+            "server_ip": server_ip,
+            "server_port": server_port,
+            "session_id": session_id,
+            "character_type": character_type,
+            "character_name": character_name,
+            "status": "CONNECTED",
+            "joined_at": datetime.utcnow().isoformat(),
+            "last_seen": datetime.utcnow().isoformat()
+        }
+        self.client.hset(f"player_session:{player_id}", mapping=data)
+        self.client.expire(f"player_session:{player_id}", 1800)  # 30분 TTL
+
+        # 플레이어 데이터 저장
+        player_data = {
+            "character_type": character_type,
+            "character_name": character_name,
+            "session_id": session_id
+        }
+        self.client.hset(f"player_data:{player_id}:{session_id}", mapping=player_data)
+        self.client.expire(f"player_data:{player_id}:{session_id}", 1800)
+
+        # 세션의 플레이어 목록에 추가
+        self.client.sadd(f"session:{session_id}:players", player_id)
+
+    def get_active_player_session(self, player_id: str) -> Optional[Dict]:
+        """플레이어의 활성 세션 조회"""
+        data = self.client.hgetall(f"player_session:{player_id}")
+        if not data:
+            return None
+
+        # 세션이 여전히 유효한지 확인 (INGAME 서버만)
+        server_id = data.get("server_id")
+        if server_id:
+            server_info = self.get_server_info(server_id)
+            if server_info and server_info.get("status") == GameServerStatus.IN_GAME.value:
+                return data
+
+        # 세션이 유효하지 않으면 삭제 (INGAME이 아니거나 서버가 없음)
+        self.client.delete(f"player_session:{player_id}")
+        return None
+
+    def get_player_data(self, player_id: str, session_id: str) -> Optional[Dict]:
+        """플레이어 캐릭터 데이터 조회"""
+        return self.client.hgetall(f"player_data:{player_id}:{session_id}")
+
+    def update_player_status(self, player_id: str, status: str) -> None:
+        """플레이어 상태 업데이트"""
+        self.client.hset(f"player_session:{player_id}", mapping={
+            "status": status,
+            "last_seen": datetime.utcnow().isoformat()
+        })
+
+    def cleanup_player_session(self, player_id: str) -> None:
+        """플레이어 세션 삭제"""
+        session_data = self.client.hgetall(f"player_session:{player_id}")
+        if session_data:
+            session_id = session_data.get("session_id")
+            if session_id:
+                self.client.srem(f"session:{session_id}:players", player_id)
+                self.client.delete(f"player_data:{player_id}:{session_id}")
+
+        self.client.delete(f"player_session:{player_id}")
+
     # ==================== Game Session Management ====================
 
     def create_session(self, session_id: str, server_id: str, max_players: int) -> None:
