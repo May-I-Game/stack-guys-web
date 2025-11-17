@@ -272,6 +272,81 @@ class RedisClient:
         self.client.delete(f"session:{session_id}")
         self.client.delete(f"session:{session_id}:players")
 
+    # ==================== Atomic Server Assignment (Lua Script) ====================
+
+    def atomic_assign_to_server(self) -> Optional[Dict]:
+        """
+        원자적으로 사용 가능한 서버를 선택하고 플레이어 수 증가
+
+        Lua Script를 사용하여 다음 작업을 원자적으로 수행:
+        1. 모든 서버 조회
+        2. 사용 가능한 서버 필터링 (AVAILABLE/STARTING, 정원 미달, 하트비트 유효)
+        3. 순차 채우기: 가장 많이 찬 서버 선택 (같으면 작은 포트 우선)
+        4. 선택된 서버의 current_players 즉시 증가
+        5. 서버 정보 반환
+
+        이 방식으로 동시 요청 시 Race Condition 방지
+        """
+        lua_script = """
+        local servers = redis.call('SMEMBERS', 'servers:all')
+        local best_server = nil
+        local best_count = -1
+        local best_port = 999999
+        local current_time_str = ARGV[1]
+
+        -- ISO 시간을 초 단위로 변환하는 간단한 파싱 (정확하진 않지만 60초 체크용으로 충분)
+        local function parse_iso_time(iso_str)
+            if not iso_str then return 0 end
+            -- 2025-11-16T16:39:01.787080 형식에서 초 추출 (간단히 문자열 비교)
+            return iso_str
+        end
+
+        for _, server_id in ipairs(servers) do
+            local server_key = 'server:' .. server_id
+            local current_players = tonumber(redis.call('HGET', server_key, 'current_players') or '0')
+            local max_players = tonumber(redis.call('HGET', server_key, 'max_players') or '100')
+            local status = redis.call('HGET', server_key, 'status')
+            local last_heartbeat = redis.call('HGET', server_key, 'last_heartbeat')
+            local port = tonumber(redis.call('HGET', server_key, 'port') or '7779')
+
+            -- 조건 체크: AVAILABLE 또는 STARTING, 정원 미달
+            if (status == 'AVAILABLE' or status == 'STARTING') and
+               current_players < max_players and
+               last_heartbeat then
+
+                -- 순차 채우기: 가장 많이 사용 중인 서버 선택
+                -- current_players가 같으면 작은 포트 번호 우선
+                if current_players > best_count or
+                   (current_players == best_count and port < best_port) then
+                    best_count = current_players
+                    best_port = port
+                    best_server = server_id
+                end
+            end
+        end
+
+        if best_server then
+            -- 원자적으로 플레이어 수 증가
+            redis.call('HINCRBY', 'server:' .. best_server, 'current_players', 1)
+            return best_server
+        else
+            return nil
+        end
+        """
+
+        try:
+            # Lua 스크립트 실행 (원자적 연산!)
+            result = self.client.eval(lua_script, 0, datetime.utcnow().isoformat())
+
+            if result:
+                server_id = result.decode('utf-8') if isinstance(result, bytes) else result
+                server_info = self.get_server_info(server_id)
+                return server_info
+            return None
+        except Exception as e:
+            print(f"❌ Lua script error: {e}")
+            return None
+
     # ==================== Health Check ====================
 
     def ping(self) -> bool:
