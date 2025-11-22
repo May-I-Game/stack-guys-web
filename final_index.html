@@ -122,6 +122,24 @@
         font-weight: bold;
         margin-bottom: 10px;
       }
+
+      /* PC 환경: 브라우저 창에 완전히 꽉 차게 */
+      html, body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: #231F20;
+      }
+
+      #unity-canvas {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw !important;
+        height: 100vh !important;
+      }
     </style>
   </head>
   <body style="text-align: center; padding: 0; border: 0; margin: 0;">
