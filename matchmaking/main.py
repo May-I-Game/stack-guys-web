@@ -1,8 +1,11 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 import uuid
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
+from pathlib import Path
 from models import (
     MatchmakingRequest,
     MatchmakingResponse,
@@ -111,14 +114,56 @@ async def shutdown_event():
     print("🛑 Auto-cleanup scheduler stopped")
 
 
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 async def root():
-    """헬스 체크"""
+    """서버 모니터링 대시보드"""
+    html_path = Path(__file__).parent / "templates" / "index.html"
+    with open(html_path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+@app.get("/api/servers/dashboard")
+async def get_dashboard_data():
+    """대시보드용 서버 데이터 API"""
+    servers = redis_client.get_all_servers()
+    queue_length = redis_client.get_queue_length()
+
+    current_time = datetime.utcnow()
+    active_servers = 0
+    total_players = 0
+
+    server_list = []
+    for server in servers:
+        # 하트비트 시간 계산
+        last_heartbeat = datetime.fromisoformat(server.get('last_heartbeat', ''))
+        seconds_ago = int((current_time - last_heartbeat).total_seconds())
+
+        current_players = int(server.get('current_players', 0))
+        if current_players > 0 or server.get('status') in ['AVAILABLE', 'STARTING']:
+            active_servers += 1
+
+        total_players += current_players
+
+        server_list.append({
+            "ip": server.get('ip'),
+            "port": server.get('port'),
+            "status": server.get('status'),
+            "current_players": current_players,
+            "max_players": int(server.get('max_players', 100)),
+            "cpu_usage": float(server.get('cpu_usage', 0)),
+            "memory_usage": float(server.get('memory_usage', 0)),
+            "heartbeat_seconds_ago": seconds_ago
+        })
+
+    # 플레이어 수 기준 내림차순 정렬
+    server_list.sort(key=lambda x: x['current_players'], reverse=True)
+
     return {
-        "status": "ok",
-        "service": "Stack Guys Matchmaking Server",
-        "version": "1.0.0",
-        "redis_connected": redis_client.ping()
+        "total_servers": len(servers),
+        "active_servers": active_servers,
+        "total_players": total_players,
+        "queue_length": queue_length,
+        "servers": server_list
     }
 
 
@@ -473,7 +518,6 @@ async def kill_server_after_delay(server_id: str, port: int, delay: int):
         print(f"   stderr: {result.stderr}")
         print(f"   return_code: {result.returncode}")
 
-        # Redis 데이터도 삭제
         redis_client.client.delete(f"server:{server_id}")
 
         print(f"✅ 서버 프로세스 종료 완료: {server_id} (port: {port})")

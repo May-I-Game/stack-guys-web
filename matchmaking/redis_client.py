@@ -8,11 +8,18 @@ from models import GameServerInfo, GameServerStatus, MatchmakingStatus
 
 class RedisClient:
     def __init__(self):
+        import ssl as ssl_module
+
         self.client = redis.Redis(
             host=settings.redis_host,
             port=settings.redis_port,
             db=settings.redis_db,
-            decode_responses=True
+            ssl=True,  # 🔥 ElastiCache Redis TLS/SSL 활성화
+            ssl_cert_reqs=ssl_module.CERT_NONE,  # 인증서 검증 비활성화 (redis 5.x 호환)
+            ssl_check_hostname=False,  # 호스트 이름 검증 비활성화
+            decode_responses=True,
+            socket_connect_timeout=10,  # 연결 타임아웃 10초
+            socket_timeout=10  # 읽기/쓰기 타임아웃 10초
         )
 
     # ==================== Matchmaking Queue ====================
