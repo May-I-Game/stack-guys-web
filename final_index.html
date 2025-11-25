@@ -233,9 +233,23 @@
         document.getElementsByTagName('head')[0].appendChild(meta);
 
         var canvas = document.querySelector("#unity-canvas");
-        canvas.style.width = "100%";
-        canvas.style.height = "100%";
-        canvas.style.position = "fixed";
+
+        // iOS Chrome 감지
+        var isIOSChrome = /CriOS/i.test(navigator.userAgent) && /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+        if (isIOSChrome) {
+          // iOS Chrome: 높이 기준으로 맞추고 가로는 비율 유지
+          canvas.style.width = "auto";
+          canvas.style.height = "100vh";
+          canvas.style.position = "fixed";
+          canvas.style.left = "50%";
+          canvas.style.transform = "translateX(-50%)";
+        } else {
+          // 다른 환경: 기존대로 100% width/height
+          canvas.style.width = "100%";
+          canvas.style.height = "100%";
+          canvas.style.position = "fixed";
+        }
 
         document.body.style.textAlign = "left";
 
