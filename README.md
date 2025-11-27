@@ -1,4 +1,4 @@
-# Stack Guys Web Server
+# Stack Guys Infra Server
 
 Unity WebGL 멀티플레이어 게임을 위한 웹 서버 및 매치메이킹 인프라
 
@@ -14,60 +14,10 @@ stack-guys-web/
 │   ├── requirements.txt     # Python 의존성
 │   ├── .env                 # 환경 변수
 │   └── run.sh              # 서버 실행 스크립트
-├── nginx_default.conf       # Nginx 설정 (WebGL 서빙 + API 프록시)
+├── nginx_default.conf       # Nginx 설정 (WebGL 서빙)
 └── final_index.html         # Unity WebGL 클라이언트 HTML
 ```
 
-## 전체 아키텍처
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     WebGL Client (Browser)                   │
-│              (Unity Game + Matchmaking UI)                   │
-└─────────────────┬───────────────────────────────────────────┘
-                  │ HTTP
-                  ↓
-┌─────────────────────────────────────────────────────────────┐
-│                   AWS Application Load Balancer              │
-│                  (Health Check: /health)                     │
-└─────────────────┬───────────────────────────────────────────┘
-                  │
-                  ↓
-┌─────────────────────────────────────────────────────────────┐
-│               EC2 Instance (Web Server)                      │
-│  ┌───────────────────────────────────────────────────────┐  │
-│  │  Nginx (Port 80)                                      │  │
-│  │  - Unity WebGL 정적 파일 서빙                         │  │
-│  │  - Brotli 압축                                        │  │
-│  │  - /api/* → FastAPI 프록시                            │  │
-│  └───────────────────────┬───────────────────────────────┘  │
-│                          │                                   │
-│  ┌───────────────────────▼───────────────────────────────┐  │
-│  │  FastAPI (Port 8000)                                  │  │
-│  │  - 매치메이킹 API                                      │  │
-│  │  - 게임 서버 관리 API                                  │  │
-│  │  - 플레이어 세션 관리                                  │  │
-│  └───────────────────────┬───────────────────────────────┘  │
-└────────────────────────┬─┴───────────────────────────────────┘
-                         │
-                         ↓
-        ┌────────────────────────────────┐
-        │   AWS ElastiCache Redis        │
-        │   (TLS/SSL 활성화)             │
-        │   - 매치메이킹 큐              │
-        │   - 게임 서버 상태             │
-        │   - 플레이어 세션              │
-        └────────────────────────────────┘
-                         ↑
-                         │ Heartbeat (30초마다)
-                         │
-        ┌────────────────┴───────────────┐
-        │  EC2 Instance (Game Server)    │
-        │  - Unity Dedicated Server      │
-        │  - 포트: 7779-7790             │
-        │  - Auto Scaling Group          │
-        └────────────────────────────────┘
-```
 
 ## 주요 기능
 
@@ -198,7 +148,7 @@ redis-cli -h master.matchmaking-redis.ee8ufb.apn2.cache.amazonaws.com --tls
 - **순차 채우기**: 서버를 순차적으로 채워 빈 서버 최소화
 - **Brotli 압축**: WebGL 번들 크기 감소 (WASM, JS, Data)
 - **Redis TTL**: 자동 데이터 정리로 메모리 최적화
-- **백그라운드 스케줄러**: 죽은 서버 자동 정리 (5분마다)
+- **백그라운드 스케줄러**: 죽은 서버 자동 정리
 
 ## AWS 인프라
 
@@ -213,3 +163,4 @@ redis-cli -h master.matchmaking-redis.ee8ufb.apn2.cache.amazonaws.com --tls
 - 매치메이킹 서버 상세: `matchmaking/README.md`
 - Unity WebGL 클라이언트: `final_index.html`
 - Nginx 설정: `nginx_default.conf`
+
