@@ -158,9 +158,60 @@ redis-cli -h master.matchmaking-redis.ee8ufb.apn2.cache.amazonaws.com --tls
 - **EC2 Auto Scaling Group**: 웹 서버 및 게임 서버 자동 스케일링
 - **Security Group**: 포트 80 (HTTP), 8000 (FastAPI), 7779-7790 (게임 서버)
 
+## 테스트
+
+### 동시 매칭 요청 테스트 (Race Condition 검증)
+
+**파일**: `matchmaking/test_concurrent.py`
+
+동시에 수백 명의 플레이어가 매칭 요청을 보내는 상황을 시뮬레이션하여 **Lua Script 원자적 할당**이 제대로 작동하는지 검증하는 테스트 도구입니다.
+
+**기능**:
+- N명의 플레이어 동시 매칭 요청 시뮬레이션
+- 서버별 플레이어 분배 현황 분석
+- 순차 채우기 전략 검증 (7779가 100명 차기 전에 7780으로 배정되는지 체크)
+- Race Condition 발생 여부 확인
+
+**사용법**:
+```bash
+cd matchmaking
+
+# 100명 동시 요청 테스트
+python3 test_concurrent.py 100
+
+# 500명 동시 요청 테스트
+python3 test_concurrent.py 500
+```
+
+**출력 예시**:
+```
+🚀 100명 동시 매칭 테스트 시작...
+
+⏱️  총 소요 시간: 3.42초
+✅ 매칭 성공: 100명
+⏰ 타임아웃: 0명
+❌ 에러: 0명
+
+📊 서버별 분배 현황:
+   3.37.88.2:7779: 100명 (100.0%)
+
+🎯 순차 채우기 검증:
+   ✅ 순차 채우기 정상 동작
+```
+
+**검증 항목**:
+1. **Race Condition 방지**: 동시 요청 시 서버 정원 초과 없이 정확히 분배
+2. **순차 채우기**: 낮은 포트 서버부터 순차적으로 채움 (7779 → 7780 → 7781)
+3. **매칭 성공률**: 타임아웃 및 에러 없이 모든 플레이어 매칭
+4. **응답 시간**: 대규모 동시 요청 처리 성능 측정
+
 ## 참고
 
 - 매치메이킹 서버 상세: `matchmaking/README.md`
 - Unity WebGL 클라이언트: `final_index.html`
 - Nginx 설정: `nginx_default.conf`
+<<<<<<< Updated upstream
 
+=======
+- 동시성 테스트: `matchmaking/test_concurrent.py`
+>>>>>>> Stashed changes
