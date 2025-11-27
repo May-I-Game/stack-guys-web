@@ -1,0 +1,14 @@
+C:\Users\서정\source\repos\BotClient\WebConsoleBot\WebConsoleBot\bin\Debug\net8.0\WebConsoleBot.exe
+C:\Users\서정\source\repos\BotClient\WebConsoleBot\WebConsoleBot\bin\Debug\net8.0\WebConsoleBot.deps.json
+C:\Users\서정\source\repos\BotClient\WebConsoleBot\WebConsoleBot\bin\Debug\net8.0\WebConsoleBot.runtimeconfig.json
+C:\Users\서정\source\repos\BotClient\WebConsoleBot\WebConsoleBot\bin\Debug\net8.0\WebConsoleBot.dll
+C:\Users\서정\source\repos\BotClient\WebConsoleBot\WebConsoleBot\bin\Debug\net8.0\WebConsoleBot.pdb
+C:\Users\서정\source\repos\BotClient\WebConsoleBot\WebConsoleBot\obj\Debug\net8.0\WebConsoleBot.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\서정\source\repos\BotClient\WebConsoleBot\WebConsoleBot\obj\Debug\net8.0\WebConsoleBot.AssemblyInfoInputs.cache
+C:\Users\서정\source\repos\BotClient\WebConsoleBot\WebConsoleBot\obj\Debug\net8.0\WebConsoleBot.AssemblyInfo.cs
+C:\Users\서정\source\repos\BotClient\WebConsoleBot\WebConsoleBot\obj\Debug\net8.0\WebConsoleBot.csproj.CoreCompileInputs.cache
+C:\Users\서정\source\repos\BotClient\WebConsoleBot\WebConsoleBot\obj\Debug\net8.0\WebConsoleBot.dll
+C:\Users\서정\source\repos\BotClient\WebConsoleBot\WebConsoleBot\obj\Debug\net8.0\refint\WebConsoleBot.dll
+C:\Users\서정\source\repos\BotClient\WebConsoleBot\WebConsoleBot\obj\Debug\net8.0\WebConsoleBot.pdb
+C:\Users\서정\source\repos\BotClient\WebConsoleBot\WebConsoleBot\obj\Debug\net8.0\WebConsoleBot.genruntimeconfig.cache
+C:\Users\서정\source\repos\BotClient\WebConsoleBot\WebConsoleBot\obj\Debug\net8.0\ref\WebConsoleBot.dll

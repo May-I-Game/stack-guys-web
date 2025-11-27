@@ -1,0 +1,23 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v8.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v8.0": {
+      "WebConsoleBot/1.0.0": {
+        "runtime": {
+          "WebConsoleBot.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "WebConsoleBot/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}
