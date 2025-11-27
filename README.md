@@ -12,8 +12,13 @@ stack-guys-web/
 │   ├── models.py            # Pydantic 데이터 모델
 │   ├── config.py            # 환경 설정 (Redis, 포트 등)
 │   ├── requirements.txt     # Python 의존성
+│   ├── test_concurrent.py   # 동시 매칭 요청 테스트 (Python)
 │   ├── .env                 # 환경 변수
 │   └── run.sh              # 서버 실행 스크립트
+├── ConsoleBot/              # 게임 서버 부하 테스트 (C# WebSocket AI 봇)
+│   └── WebConsoleBot/
+│       ├── Program.cs       # AI 봇 메인 로직
+│       └── bin/Debug/net8.0/WebConsoleBot.exe  # 실행 파일
 ├── nginx_default.conf       # Nginx 설정 (WebGL 서빙)
 └── final_index.html         # Unity WebGL 클라이언트 HTML
 ```
@@ -160,11 +165,13 @@ redis-cli -h master.matchmaking-redis.ee8ufb.apn2.cache.amazonaws.com --tls
 
 ## 테스트
 
-### 동시 매칭 요청 테스트 (Race Condition 검증)
+### 1. 동시 매칭 요청 테스트 (Race Condition 검증)
 
 **파일**: `matchmaking/test_concurrent.py`
 
 동시에 수백 명의 플레이어가 매칭 요청을 보내는 상황을 시뮬레이션하여 **Lua Script 원자적 할당**이 제대로 작동하는지 검증하는 테스트 도구입니다.
+
+**언어**: Python (aiohttp 기반 비동기)
 
 **기능**:
 - N명의 플레이어 동시 매칭 요청 시뮬레이션
@@ -205,9 +212,74 @@ python3 test_concurrent.py 500
 3. **매칭 성공률**: 타임아웃 및 에러 없이 모든 플레이어 매칭
 4. **응답 시간**: 대규모 동시 요청 처리 성능 측정
 
+---
+
+### 2. 게임 서버 부하 테스트 (WebSocket AI 봇)
+
+**폴더**: `ConsoleBot/`
+**언어**: C# (.NET 8.0)
+**실행 파일**: `ConsoleBot/WebConsoleBot/bin/Debug/net8.0/WebConsoleBot.exe`
+
+실제 Unity 게임 서버에 WebSocket으로 연결하여 **AI 봇이 플레이어처럼 행동**하며 서버 부하를 테스트하는 도구입니다.
+
+**주요 기능**:
+- **2가지 테스트 모드**:
+  - `매치메이킹 모드` (기본): 매치메이킹 API를 통해 자동 서버 할당
+  - `수동 접속 모드`: 특정 IP/Port로 직접 연결 (개발/디버깅용)
+- **AI 봇 행동**:
+  - 30 FPS로 게임 서버에 입력 전송
+  - 랜덤 이동 (5-7초마다 방향 전환)
+  - 랜덤 점프 (3-5초마다)
+- **대규모 동시 접속**: 수백 개의 봇을 동시에 실행하여 서버 부하 테스트
+- **자동 재연결**: 연결 끊김 시 최대 5회 자동 재시도
+- **성능 최적화**:
+  - ThreadPool 최소 스레드 1000개 설정
+  - HTTP 연결 수 제한 해제 (MaxConnectionsPerServer)
+  - 봇 생성 시 50ms 딜레이로 부하 분산
+
+**명령어**:
+```bash
+# 실행
+cd ConsoleBot/WebConsoleBot/bin/Debug/net8.0
+./WebConsoleBot.exe
+
+# 명령어
+> match                  # 매치메이킹 모드 설정 (기본)
+> server <ip> <port>     # 수동 접속 모드 설정
+> start 100              # 100개 봇 시작
+> status                 # 현재 상태 확인
+> stop                   # 모든 봇 종료
+> exit                   # 프로그램 종료
+```
+
+**테스트 시나리오 예시**:
+```bash
+# 시나리오 1: 매치메이킹 부하 테스트
+> match
+> start 200              # 200명 동시 매칭 요청
+
+# 시나리오 2: 특정 게임 서버 부하 테스트
+> server 3.37.88.2 7779
+> start 50               # 7779 포트 게임 서버에 50개 봇 접속
+```
+
+**검증 항목**:
+1. **서버 동시 접속 처리**: 게임 서버가 수백 명 동시 접속 처리 가능 여부
+2. **매치메이킹 처리량**: 대량 매칭 요청 시 응답 시간 및 성공률
+3. **WebSocket 안정성**: 장시간 연결 유지 및 패킷 처리 성능
+4. **메모리/CPU 사용량**: 게임 서버 리소스 사용 모니터링
+5. **재연결 로직**: 연결 끊김 시 자동 복구 동작 검증
+
+**기술 스택**:
+- `ClientWebSocket`: .NET WebSocket 클라이언트
+- `ConcurrentDictionary`: 스레드 안전한 봇 관리
+- `SocketsHttpHandler`: HTTP 연결 풀 최적화
+- `Task.Run`: 비동기 병렬 봇 실행
+
 ## 참고
 
 - 매치메이킹 서버 상세: `matchmaking/README.md`
 - Unity WebGL 클라이언트: `final_index.html`
 - Nginx 설정: `nginx_default.conf`
-- 동시성 테스트: `matchmaking/test_concurrent.py`
+- 매칭 동시성 테스트: `matchmaking/test_concurrent.py`
+- 게임 서버 부하 테스트: `ConsoleBot/`
