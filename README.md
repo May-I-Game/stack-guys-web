@@ -210,8 +210,4 @@ python3 test_concurrent.py 500
 - 매치메이킹 서버 상세: `matchmaking/README.md`
 - Unity WebGL 클라이언트: `final_index.html`
 - Nginx 설정: `nginx_default.conf`
-<<<<<<< Updated upstream
-
-=======
 - 동시성 테스트: `matchmaking/test_concurrent.py`
->>>>>>> Stashed changes
