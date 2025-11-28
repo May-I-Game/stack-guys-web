@@ -989,6 +989,290 @@ redis.Redis(
 
 ---
 
+### Q6-3. 왜 HTTPS를 적용하지 않았나요?
+
+**A:**
+
+**현재 상태:**
+- WebGL 클라이언트 제공: HTTP (ALB + Nginx)
+- 매치메이킹 API: HTTP (ALB + FastAPI)
+- 게임 서버: WS/WSS 혼용 (자체 서명 인증서)
+
+**HTTPS를 적용하지 않은 핵심 이유:**
+
+---
+
+### **1) 동적 IP 기반 게임 서버 (ASG) - 가장 큰 기술적 장벽**
+
+**근본적인 문제:**
+
+현재 아키텍처는 **Auto Scaling Group으로 게임 서버를 동적으로 생성/삭제**합니다.
+```
+게임 서버 인스턴스가 생성될 때마다:
+- Public IP: 3.37.88.2 (매번 변경)
+- 게임 서버: 포트 7779-7790
+- Unity WebGL 클라이언트 → WebSocket 직접 연결 (IP:Port)
+```
+
+**HTTPS/WSS 적용 시 필요한 것:**
+
+각 게임 서버마다 **도메인 + 인증서**가 필요합니다:
+```
+게임 서버 1: 3.37.88.2      → game1.stackguys.com  (A 레코드 + SSL 인증서)
+게임 서버 2: 13.125.34.5    → game2.stackguys.com  (A 레코드 + SSL 인증서)
+게임 서버 3: 43.203.151.8   → game3.stackguys.com  (A 레코드 + SSL 인증서)
+게임 서버 4: 52.79.123.45   → game4.stackguys.com  (A 레코드 + SSL 인증서)
+...
+ASG 확장 시 무한 반복
+```
+
+**기술적 난점:**
+
+**① 동적 DNS 자동화 필요**
+```python
+# EventBridge + Lambda 필요
+# ASG 인스턴스 시작 이벤트를 감지하여 자동 처리
+
+def on_instance_launch(event):
+    instance_id = event['detail']['instance-id']
+    public_ip = get_instance_ip(instance_id)
+
+    # Route 53 A 레코드 자동 생성
+    route53.change_resource_record_sets(
+        HostedZoneId='Z1234',
+        ChangeBatch={
+            'Changes': [{
+                'Action': 'CREATE',
+                'ResourceRecordSet': {
+                    'Name': f'game{instance_id}.stackguys.com',
+                    'Type': 'A',
+                    'TTL': 60,
+                    'ResourceRecords': [{'Value': public_ip}]
+                }
+            }]
+        }
+    )
+```
+
+**② Let's Encrypt 인증서 자동 발급/갱신**
+```bash
+# 각 게임 서버 인스턴스마다 SSH로 원격 실행 필요
+ssh ubuntu@3.37.88.2 "sudo certbot certonly -d game1.stackguys.com --standalone"
+
+# 문제점:
+# - 인증서 발급에 1-3분 소요 → ASG Warm-up 시간 증가
+# - 90일마다 갱신 필요 → 갱신 실패 시 게임 서버 접속 불가
+# - 동시에 여러 인스턴스 생성 시 Let's Encrypt Rate Limit (주당 50개)
+```
+
+**③ 와일드카드 인증서의 한계**
+```
+와일드카드 인증서: *.stackguys.com
+
+✅ 가능: game1.stackguys.com, game2.stackguys.com
+❌ 불가능: 3.37.88.2 (IP 주소는 인증서로 커버 불가)
+
+→ 결국 각 인스턴스마다 서브도메인 필요
+→ 각 서브도메인마다 인증서 필요
+```
+
+**④ 인스턴스 종료 시 정리 문제**
+```python
+# ASG 인스턴스 종료 시:
+# - Route 53 A 레코드 삭제 필요
+# - 인증서 폐기(Revoke) 필요 (선택)
+
+def on_instance_terminate(event):
+    instance_id = event['detail']['instance-id']
+
+    # A 레코드 삭제
+    route53.change_resource_record_sets(
+        HostedZoneId='Z1234',
+        ChangeBatch={
+            'Changes': [{
+                'Action': 'DELETE',
+                'ResourceRecordSet': {
+                    'Name': f'game{instance_id}.stackguys.com',
+                    # ... 삭제 로직
+                }
+            }]
+        }
+    )
+```
+
+**결론: 자동화 복잡도가 매우 높음**
+
+HTTPS 적용을 위해 추가로 구현해야 할 것:
+1. **EventBridge Rule**: ASG 인스턴스 생성/종료 이벤트 감지
+2. **Lambda Function**: DNS 레코드 생성/삭제 자동화
+3. **User Data Script**: 인스턴스 시작 시 certbot 자동 실행
+4. **CloudWatch Alarms**: 인증서 만료 30일 전 알림
+5. **Cron Job**: 인증서 자동 갱신 (90일마다)
+6. **Error Handling**: DNS 생성 실패, 인증서 발급 실패 시 롤백
+
+→ 이 모든 자동화를 **완벽하게 구현하지 않으면** 게임 서버가 **동작하지 않습니다**.
+
+---
+
+### **2) 프로젝트 우선순위 - 핵심 기능 구현 우선**
+
+**개발 기간 내 우선순위:**
+
+**✅ 완료한 핵심 기능 (우선순위 높음)**
+1. **매치메이킹 시스템**
+   - Lua Script 기반 원자적 서버 할당
+   - Race Condition 완벽 방지
+   - 순차 채우기 전략
+
+2. **Auto Scaling Group**
+   - 게임 서버 동적 확장/축소
+   - 하트비트 기반 서버 상태 관리
+   - 죽은 서버 자동 정리
+
+3. **재입장 시스템**
+   - Redis 기반 플레이어 세션 관리
+   - 30분 TTL 캐릭터 정보 복원
+
+4. **부하 테스트 도구**
+   - Python 동시성 테스트 (Race Condition 검증)
+   - C# AI 봇 (WebSocket 부하 테스트)
+
+**❌ 미완료 (우선순위 낮음)**
+- **HTTPS 적용**: 위에서 설명한 자동화 복잡도
+- CloudWatch 커스텀 메트릭 (큐 길이 기반 스케일링)
+- 매치메이킹 서버 ASG
+
+**시간 제약:**
+- 짧은 개발 기간 내 모든 계층에 HTTPS 적용은 **리스크가 매우 큼**
+- HTTPS 자동화 구현 중 버그 발생 시 **전체 게임 서비스 중단** 가능
+- 핵심 기능(매치메이킹, ASG)을 안정적으로 완성하는 것이 우선
+
+**기술 부채로 관리:**
+- 프로덕션 배포 전 HTTPS 적용 계획
+- 도메인 구매 후 단계적 적용
+- 현재는 **인프라 구조 완성**에 집중
+
+---
+
+### **3) 내부 통신은 이미 암호화 완료 - 보안 핵심은 보호됨**
+
+**중요: 민감한 데이터는 이미 TLS/SSL로 보호 중**
+
+**✅ 이미 암호화된 통신:**
+
+**ElastiCache Redis ↔ 매치메이킹 서버 (TLS 활성화)**
+```python
+# redis_client.py
+redis.Redis(
+    host='master.matchmaking-redis.ee8ufb.apn2.cache.amazonaws.com',
+    port=6379,
+    ssl=True,              # ✅ TLS 암호화 활성화
+    ssl_cert_reqs=None,
+    ssl_check_hostname=False,
+    decode_responses=True
+)
+```
+
+**저장되는 민감 데이터:**
+- 플레이어 세션 정보 (player_session:{player_id})
+- 캐릭터 데이터 (player_data:{player_id}:{session_id})
+- 게임 서버 상태 (server:{server_id})
+- 매칭 티켓 (ticket:{ticket_id})
+
+**→ 모든 민감 데이터는 TLS로 암호화되어 전송/저장됨**
+
+**❌ 암호화되지 않은 통신 (HTTP/WS):**
+
+**WebGL 클라이언트 ↔ ALB ↔ Nginx ↔ FastAPI**
+- 전송 데이터: 게임 플레이 데이터 (이동, 점프 등)
+- **개인정보 없음** (player_id는 UUID, 익명)
+- 게임 로직 데이터만 전송
+
+**WebGL 클라이언트 ↔ Unity 게임 서버 (WebSocket)**
+- 전송 데이터: 게임 상태 동기화 (위치, 애니메이션 등)
+- **개인정보 없음**
+
+**보안 우선순위:**
+```
+우선순위 1 (완료): Redis 암호화 ✅
+  → 플레이어 세션, 캐릭터 정보, 서버 상태 보호
+
+우선순위 2 (미완료): 외부 통신 암호화 ❌
+  → 게임 플레이 데이터만 전송 (개인정보 없음)
+  → 공격자가 가로채도 얻을 수 있는 정보: 게임 내 이동 방향, 점프 여부
+```
+
+**결론:**
+- **진짜 중요한 데이터(플레이어 정보, 세션)는 이미 TLS로 보호됨**
+- HTTP로 전송되는 데이터는 게임 플레이 정보뿐
+- 개인정보 보호법 관점에서 HTTPS 의무사항 아님 (개인정보 미포함)
+
+---
+
+## **종합 결론**
+
+**HTTPS를 적용하지 않은 이유를 한 문장으로:**
+
+> **"ASG로 동적 생성되는 게임 서버마다 도메인 + 인증서를 자동으로 발급/관리하는 복잡한 자동화를 구현하기보다, 핵심 기능(매치메이킹, ASG, 재입장) 완성을 우선했고, 민감 데이터는 이미 Redis TLS로 보호되어 있습니다."**
+
+**프로덕션 배포 시 HTTPS 적용 계획:**
+1. 도메인 구매 (stackguys.com)
+2. ACM 인증서 발급 (ALB용)
+3. Lambda + EventBridge로 게임 서버 DNS/인증서 자동화
+4. Let's Encrypt 자동 갱신 스크립트
+5. 단계적 배포 및 테스트
+
+**프로덕션 배포 시 HTTPS 적용 방법:**
+
+**1) ACM 인증서 발급 (ALB용)**
+```bash
+# AWS Console → ACM → Request certificate
+도메인: stackguys.com, *.stackguys.com
+검증 방법: DNS 검증 (Route 53 자동)
+```
+
+**2) ALB 리스너 추가**
+```
+리스너 1: HTTP (80) → HTTPS로 리다이렉트
+리스너 2: HTTPS (443) → Target Group
+SSL 인증서: ACM에서 발급받은 인증서
+```
+
+**3) Let's Encrypt (Nginx용)**
+```bash
+# Certbot 설치
+sudo apt install certbot python3-certbot-nginx
+
+# 인증서 발급 및 자동 설정
+sudo certbot --nginx -d stackguys.com -d www.stackguys.com
+
+# 자동 갱신 설정 (90일마다)
+sudo systemctl enable certbot.timer
+```
+
+**4) Unity 게임 서버 (공인 인증서)**
+```bash
+# Let's Encrypt로 공인 인증서 발급
+sudo certbot certonly --standalone -d game1.stackguys.com
+
+# Unity에 공인 인증서 적용
+/etc/letsencrypt/live/game1.stackguys.com/fullchain.pem
+/etc/letsencrypt/live/game1.stackguys.com/privkey.pem
+```
+
+**HTTPS 적용 후 장점:**
+- 브라우저 경고 없음 ("안전하지 않음" 제거)
+- SEO 향상 (Google 검색 순위)
+- 중간자 공격(MITM) 방지
+- 신뢰도 향상 (자물쇠 아이콘)
+
+**결론:**
+- 개발 단계에서는 HTTP로 충분히 기능 검증 가능
+- 프로덕션 배포 시 HTTPS 적용 예정 (ACM + Let's Encrypt)
+- 현재는 **핵심 인프라 구조 완성**에 집중
+
+---
+
 ### Q6-3. DDoS 공격 방어는?
 
 **A:**
