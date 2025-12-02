@@ -43,7 +43,7 @@ stack-guys-web/
 ### 3. 게임 서버 관리
 - Unity Dedicated Server 등록 및 하트비트 모니터링
 - 게임 종료 후 자동 프로세스 종료 (SSH 기반)
-- ASG 대응 (동적 IP 지원)
+- ASG 대응 (동적 IP 지원, CloudWatch 커스텀 메트릭 -> Redis 대기열 인원수 기준)
 - 서버 상태 추적 (AVAILABLE, STARTING, IN_GAME)
 
 ### 4. 플레이어 세션 관리
@@ -208,7 +208,7 @@ python3 test_concurrent.py 500
 
 **검증 항목**:
 1. **Race Condition 방지**: 동시 요청 시 서버 정원 초과 없이 정확히 분배
-2. **순차 채우기**: 낮은 포트 서버부터 순차적으로 채움 (7779 → 7780 → 7781)
+2. **순차 채우기**: 낮은 포트 서버부터 순차적으로 채움 (7779 → 7780)
 3. **매칭 성공률**: 타임아웃 및 에러 없이 모든 플레이어 매칭
 4. **응답 시간**: 대규모 동시 요청 처리 성능 측정
 
@@ -283,3 +283,4 @@ cd ConsoleBot/WebConsoleBot/bin/Debug/net8.0
 - Nginx 설정: `nginx_default.conf`
 - 매칭 동시성 테스트: `matchmaking/test_concurrent.py`
 - 게임 서버 부하 테스트: `ConsoleBot/`
+
